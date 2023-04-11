@@ -1,0 +1,4 @@
+.pypirc
+dist
+*.egg-info
+time_series_cross_validation/__pycache__
