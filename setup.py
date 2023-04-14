@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='time_series_cross_validation',
-    version='1.0.2',
+    version='1.0.4',
     description='Library for cross-validating time series',
     long_description = 'Library for cross-validating time series',
     author='Gabriel Nuernberg Biazoto',

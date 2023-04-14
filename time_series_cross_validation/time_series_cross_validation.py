@@ -1,10 +1,14 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import timedelta, datetime
-import time
 from IPython.display import clear_output
-import threading
-import signal
+
+def train_test_split(X, y, time_series, begin, split, end):
+    X_train = X[(time_series >= begin) & (time_series < split)]
+    X_test = X[(time_series >= split) & (time_series <= end)]
+    y_train = y[(time_series >= begin) & (time_series < split)]
+    y_test = y[(time_series >= split) & (time_series <= end)]
+    return X_train, X_test, y_train, y_test
 
 class Time_series_CV:
     def __init__(self, time_range, offset, k_folds=6,
@@ -67,84 +71,41 @@ class Time_series_CV:
             k_fold += 1
         return folds
     
-    
-    class Cronometer(threading.Thread):
-        def __init__(self):
-            threading.Thread.__init__(self, name='chronometer')
-            signal.signal(signal.SIGINT, self.signal_handler)
-            self.killed = False
-            self.total_time = None
-            self.k_fold_progress = '0 of 0'
-            return None
-
-        def run(self):
-            interval = timedelta(seconds=1) 
-            while self.total_time is None:
-                clear_output(wait=True)
-                print('Running first k-fold...')
-                time.sleep(1)
-            while (not self.killed) and (self.total_time > timedelta()):
-                clear_output(wait=True)
-                time_to_complete = str(self.total_time).split('.')[0]
-                print(f'Time to complete validation: {time_to_complete} ({self.k_fold_progress}).')
-                self.total_time -= interval
-                time.sleep(1) 
-            return None
-        
-        def update(self, total_time, k_fold_progress):
-            self.total_time = total_time
-            self.k_fold_progress = k_fold_progress
-            return None
-
-        def kill(self):
-            self.killed = True
-            return None
-
-        def signal_handler(self, sig, frame):
-            self.kill()
-            self.join()
-            print('Interrupted process!')
-            return None
-    
-    def view_folds(self, _format='%m-%d-%y'):
+    def view_folds_graph(self, _format='%m-%d-%y'):
         plt.figure(figsize=(16, 6))
         plt.xticks(rotation=90)
         df = pd.DataFrame(self.folds).T
-        for row in range(len(df)):
-            plt.text(df.loc[row, 'begin'], row + 0.05, df.loc[row, 'begin'].strftime(format=_format), ha='center')
-            plt.hlines(row, df.loc[row, 'begin'], df.loc[row, 'split'], 'b')
-            plt.text(df.loc[row, 'split'], row + 0.05, df.loc[row, 'split'].strftime(format=_format), ha='center')
-            plt.hlines(row, df.loc[row, 'split'], df.loc[row, 'end'], 'r')
-            plt.text(df.loc[row, 'end'], row + 0.05, df.loc[row, 'end'].strftime(format=_format), ha='center')
+        for k_fold in df.index:
+            plt.text(df.loc[k_fold, 'begin'], k_fold + 0.05, df.loc[k_fold, 'begin'].strftime(format=_format), ha='center')
+            plt.hlines(k_fold, df.loc[k_fold, 'begin'], df.loc[k_fold, 'split'], 'b')
+            plt.text(df.loc[k_fold, 'split'], k_fold + 0.05, df.loc[k_fold, 'split'].strftime(format=_format), ha='center')
+            plt.hlines(k_fold, df.loc[k_fold, 'split'], df.loc[k_fold, 'end'], 'r')
+            plt.text(df.loc[k_fold, 'end'], k_fold + 0.05, df.loc[k_fold, 'end'].strftime(format=_format), ha='center')
         return None
+    
+    def view_folds(self, _format='%m-%d-%y'):
+        return pd.DataFrame(self.folds).T
             
     def validate(self, X, y, time_series, model=None, metrics_function=None):
-        cronometer = self.Cronometer()
-        cronometer.start()
-
+        print("Running first k-fold...")
         for k_fold, fold in self.folds.items():
-
-            start_time = datetime.now()
-
-            X_train = X[(time_series >= fold['begin']) & (time_series < fold['split'])]
-            X_test = X[(time_series >= fold['split']) & (time_series < fold['end'])]
-            y_train = y[(time_series >= fold['begin']) & (time_series < fold['split'])]
-            y_test = y[(time_series >= fold['split']) & (time_series < fold['end'])]
-
+            last_time = datetime.now()
+            X_train, X_test, y_train, y_test = train_test_split(X, y, time_series,
+                                                                fold['begin'], 
+                                                                fold['split'],
+                                                                fold['end'])
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             metrics = metrics_function(y_test, y_pred)
             for metric, score in metrics.items():
                 fold[metric] = score
 
-            end_time = datetime.now()
-            total_time_missing = (len(self.folds) - k_fold) * (end_time - start_time)
-            cronometer.update(total_time_missing, f'{k_fold + 1} of {len(self.folds)}')
+            finish_estimate = (len(self.folds) - k_fold) * (datetime.now() - last_time) + datetime.now() 
+            finish_estimate = str(finish_estimate).split('.')[0]
+            clear_output(wait=True)
+            print(f'({k_fold + 1} of {len(self.folds)}) Finish estimated to: {finish_estimate}')
 
-        cronometer.kill()
-        cronometer.join()
         clear_output(wait=True)
-        print("Multi-period validation completed!")    
-            
+        print("Multi-period validation completed!")             
             
         return None
